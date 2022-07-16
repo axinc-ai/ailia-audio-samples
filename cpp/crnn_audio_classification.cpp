@@ -26,29 +26,13 @@ static const char *classes[10] = {\
         "street_music"\
 };
 
-void dump_tensor(const char *id,const float *data){
-#ifdef DEBUG_DUMP
-	printf("%s\n",id);
-	for(int i=0;i<128;i++){
-		if(i<16 || i>=128-16){
-			for(int j=0;j<128;j++){
-				if(j<16 || j>=128-16){
-					printf("%f ",data[i*128+j]);
-				}
-			}
-			printf("\n");
-		}
-	}
-#endif
-}
-
 void postprocess(std::vector<float> &dst){
 	for(int i=0;i<dst.size();i++){
 		dst[i]=exp(dst[i]);
 	}
 }
 
-int predict(AILIANetwork *ailia,std::vector<float> &src){
+int infer(AILIANetwork *ailia,std::vector<float> &src){
 	int status;
 
 	unsigned int input_idx = 0;
@@ -84,7 +68,7 @@ int predict(AILIANetwork *ailia,std::vector<float> &src){
 		return -1;
 	}
 
-	printf("input shape %d %d %d %d %d\n",input_shape.x,input_shape.y,input_shape.z,input_shape.w,input_shape.dim);
+	printf("input shape %d %d %d %d dims %d\n",input_shape.x,input_shape.y,input_shape.z,input_shape.w,input_shape.dim);
 
 	if(src.size()!=input_shape.x*input_shape.y*input_shape.z*input_shape.w){
 		printf("input shape error\n");
@@ -117,12 +101,9 @@ int predict(AILIANetwork *ailia,std::vector<float> &src){
 		return -1;
 	}
 
-	printf("output shape %d %d %d %d %d\n",output_shape.x,output_shape.y,output_shape.z,output_shape.w,output_shape.dim);
+	printf("output shape %d %d %d %d dims %d\n",output_shape.x,output_shape.y,output_shape.z,output_shape.w,output_shape.dim);
 
 	std::vector<float> dst(output_shape.x*output_shape.y*output_shape.z*output_shape.w);
-
-	printf("output shape %d %d %d %d %d\n", output_shape.x, output_shape.y, output_shape.z, output_shape.w,
-		   output_shape.dim);
 
 	status = ailiaGetBlobData(ailia, &dst[0], dst.size() * sizeof(float), output_idx);
 	if (status != AILIA_STATUS_SUCCESS) {
@@ -132,7 +113,6 @@ int predict(AILIANetwork *ailia,std::vector<float> &src){
 
 	postprocess(dst);
 
-	//Dsiplay probablity
 	printf("predict result\n");
 	int max_i=0;
 	for(int i=0;i<dst.size();i++){
@@ -145,22 +125,8 @@ int predict(AILIANetwork *ailia,std::vector<float> &src){
 	return 0;
 }
 
-int load_file(std::vector<short> &buf,int *sampleRate,int *nChannels,int *nSamples,const char *from){
-	WaveReader reader;
-	reader.open_a(from);
-	buf.resize(reader.get_total_sample_n());
-	reader.get_wave(&buf[0],0,reader.get_total_sample_n(),1);
-	*sampleRate = reader.get_sampling_rate();
-	*nChannels = reader.get_channel_n();
-	*nSamples = reader.get_total_sample_n() / reader.get_channel_n();
-	printf("sampleRate : %d nChannels : %d nSamples : %d\n",*sampleRate,*nChannels,*nSamples);
-	return 0;
-}
-
 int inference(std::vector<float> &melspectrogram){
-	//Dsiplay probablity
-	dump_tensor("melspectgram",&melspectrogram[0]);
-
+	// preprocess
 	float mean = 0.0f;
 	float mean2 = 0.0f;
 	float std_val = 1.0f;
@@ -177,13 +143,9 @@ int inference(std::vector<float> &melspectrogram){
 		normalized_melspectrogram[i]=(melspectrogram[i]-mean)/std_val;
 	}
 
-	dump_tensor("input",&normalized_melspectrogram[0]);
-
+	// open onnx
 	AILIANetwork *ailia;
-
 	int env_id=AILIA_ENVIRONMENT_ID_AUTO;
-
-	printf("SELECTED ENVIRONMENT ID:%d\n",env_id);
 
 	int status=ailiaCreate(&ailia,env_id,AILIA_MULTITHREAD_AUTO);
 	if(status!=AILIA_STATUS_SUCCESS){
@@ -197,7 +159,8 @@ int inference(std::vector<float> &melspectrogram){
 		return -1;
 	}
 
-	predict(ailia,normalized_melspectrogram);
+	// infer
+	infer(ailia,normalized_melspectrogram);
 
 	ailiaDestroy(ailia);
 
@@ -205,8 +168,8 @@ int inference(std::vector<float> &melspectrogram){
 }
 
 int main(int argc, char **argv){
-	//const char *from="./24965__www-bonson-ca__bigdogbarking-02.wav";
-	const char *from="./dog.wav";
+	const char *from="./24965__www-bonson-ca__bigdogbarking-02.wav";
+	//const char *from="./dog.wav";
 	if(argc!=2){
 		//printf("Usage  : cnn_audio_claffification input.wav\n");
 		//return -1;
@@ -214,17 +177,19 @@ int main(int argc, char **argv){
 		from=argv[1];
 	}
 
-
-	std::vector<short> buf;
+	// Load wave file
 	int sampleRate,nChannels,nSamples;
-	int status=load_file(buf,&sampleRate,&nChannels,&nSamples,from);
-	if(status!=0){
+	std::vector<short> buf = read_wave_file(from,&sampleRate,&nChannels,&nSamples);
+	int status;
+
+	if(buf.size()==0){
+		printf("wav file not found or could not open %s\n",from);
 		return -1;
 	}
 
+	// Convert to mono
 	int len = nSamples;
 	std::vector<float> data(len);
-
 	for(int i=0;i<len;i++){
 		if(nChannels==2){
 			data[i]=(buf[i*2+0]+buf[i*2+1])/2/32768.0f;
@@ -233,6 +198,7 @@ int main(int argc, char **argv){
 		}
 	}
 
+	// Convert to Melspectrum
 	const int SAMPLE_RATE=44100;
 	const int FFT_N=2048;
 	const int HOP_N=1024;
@@ -248,9 +214,6 @@ int main(int argc, char **argv){
 		return -1;
 	}
 
-	printf("\n");
-	printf("frame len %d\n",frame_len);
-
 	std::vector<float> melspectrogram(MELS*frame_len);
 
 	status=ailiaAudioGetMelSpectrogram(&melspectrogram[0], &data[0], len, SAMPLE_RATE, FFT_N, HOP_N, WIN_N, AILIA_AUDIO_WIN_TYPE_HANN, 
@@ -261,7 +224,10 @@ int main(int argc, char **argv){
 		return -1;
 	}
 
+	// Infer
 	inference(melspectrogram);
+
+	return 0;
 }
 
 
