@@ -15,4 +15,4 @@
 #include <algorithm>
 #include <vector>
 
-std::vector<short> read_wave_file(const char *path, int *sampleRate, int *nChannels, int *nSamples);
+std::vector<float> read_wave_file(const char *path, int *sampleRate, int *nChannels, int *nSamples);

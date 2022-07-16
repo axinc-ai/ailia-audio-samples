@@ -101,7 +101,7 @@ int read_data_n(WaveReader *instance){
 	}
 	
 	fread(&instance->data_n,4,1,instance->fp);
-	instance->data_n/=2;
+	instance->data_n/=(instance->format.bit_per_sample/8);
 	
 	return STATUS_SUCCESS;
 }
@@ -146,7 +146,7 @@ void close(WaveReader *instance){
 
 } // namespace
 
-std::vector<short> read_wave_file(const char *path, int *sampleRate, int *nChannels, int *nSamples){
+std::vector<float> read_wave_file(const char *path, int *sampleRate, int *nChannels, int *nSamples){
 	//Create instance
 	WaveReader instance;
 	instance.fp=NULL;
@@ -155,7 +155,7 @@ std::vector<short> read_wave_file(const char *path, int *sampleRate, int *nChann
 
 	//Open file
 	int status = open_a(&instance, path);
-	std::vector<short> buf;
+	std::vector<float> buf;
 	if(status!=STATUS_SUCCESS){
 		return buf;
 	}
@@ -163,17 +163,22 @@ std::vector<short> read_wave_file(const char *path, int *sampleRate, int *nChann
 	//Format conversion
 	if(instance.format.bit_per_sample==24){
 		buf.resize(instance.data_n);
-		std::vector<char> plane_buf;
+		std::vector<unsigned char> plane_buf;
 		plane_buf.resize(instance.data_n * 3);
-		fread(&plane_buf[0],sizeof(short)*instance.data_n,1,instance.fp);
+		fread(&plane_buf[0],3*instance.data_n,1,instance.fp);
 		for(int i=0;i<instance.data_n;i++){
-			short v = (short)(((plane_buf[i*3+2]<<8)) | (plane_buf[i*3+1]));
-			buf[i]=v;
+			int v = (int)((plane_buf[i*3+2]<<24) | (plane_buf[i*3+1]<<16) | (plane_buf[i*3+0]<<8));
+			buf[i]=v * 1.0f / (1<<31);
 		}
 	}else{
 		if(instance.format.bit_per_sample==16){
 			buf.resize(instance.data_n);
-			fread(&buf[0],sizeof(short)*instance.data_n,1,instance.fp);
+			std::vector<short> plane_buf;
+			plane_buf.resize(instance.data_n);
+			fread(&plane_buf[0],sizeof(short)*instance.data_n,1,instance.fp);
+			for(int i=0;i<instance.data_n;i++){
+				buf[i]=plane_buf[i] * 1.0f / (1<<15);
+			}
 		}else{
 			printf("unknown bit per sample\n");
 		}

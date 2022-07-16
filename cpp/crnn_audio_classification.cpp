@@ -179,7 +179,7 @@ int main(int argc, char **argv){
 
 	// Load wave file
 	int sampleRate,nChannels,nSamples;
-	std::vector<short> buf = read_wave_file(from,&sampleRate,&nChannels,&nSamples);
+	std::vector<float> buf = read_wave_file(from,&sampleRate,&nChannels,&nSamples);
 	int status;
 
 	if(buf.size()==0){
@@ -192,9 +192,9 @@ int main(int argc, char **argv){
 	std::vector<float> data(len);
 	for(int i=0;i<len;i++){
 		if(nChannels==2){
-			data[i]=(buf[i*2+0]+buf[i*2+1])/2/32768.0f;
+			data[i]=(buf[i*2+0]+buf[i*2+1])/2;
 		}else{
-			data[i]=buf[i]/32768.0f;
+			data[i]=buf[i];
 		}
 	}
 

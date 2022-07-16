@@ -78,8 +78,10 @@ Execute with the following command.
 The inference result is displayed on the console.
 
 ```
+input shape 176 128 1 1 dims 4
+output shape 10 1 1 1 dims 2
 predict result
-dog_bark 0.505001
+dog_bark 0.868386
 ```
 
 ## Python API
